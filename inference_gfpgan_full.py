@@ -22,20 +22,27 @@ def restoration_endpoint(gfpgan,
                     only_center_face = False,
                     suffix = None):
     print(f'Processing {image_name} ...')
+    print(f'Processing __ {image_name} ...')
     #input_img = cv2.imread(image.file, cv2.IMREAD_COLOR)
     input_img = np.array(image)
     face_helper.clean_all()
-
+    
+    print(f'Aligning {image_name} ...')
     #Alignment
     if has_aligned:
+        print(f'Aligning 1.0 {image_name} ...')
         input_img = cv2.resize(input_img, (512, 512))
         face_helper.cropped_faces = [input_img]
+        print(f'Aligning 1 {image_name} ...')
     
     else:
+        print(f'Aligning 2.0 {image_name} ...')
         face_helper.read_image(input_img)
         face_helper.get_face_landmarks_5(only_center_face=only_center_face, pad_blur = False)
         face_helper.align_warp_face()
+        print(f'Aligning 2 {image_name} ...')
 
+    print(f'Restoring {image_name} ...')
     #Restoration
     for idx, cropped_face in enumerate(face_helper.cropped_faces):
         # prepare data
@@ -55,18 +62,19 @@ def restoration_endpoint(gfpgan,
         restored_face = restored_face.astype('uint8')
         face_helper.add_restored_face(restored_face)
 
-        if suffix is not None:
-            save_face_name = f'{image.filename}_{idx:02d}_{suffix}.png'
-        else:
-            save_face_name = f'{image.filename}_{idx:02d}.png'
-       
+        # if suffix is not None:
+        #     save_face_name = f'{image.filename}_{idx:02d}_{suffix}.png'
+        # else:
+        #     save_face_name = f'{image.filename}_{idx:02d}.png'
+    
+    print(f'Combining {image_name} ...')
     #Combine the restored faces and the input_image
-    face_helper.get_inverse_affine(None)
+    face_helper.get_inverse_affine(None )
     # paste each restored face to the input image
     upscaled_img = face_helper.paste_faces_to_input_image()
 
+    print(f'Restored')
     return upscaled_img
-
 
 
 

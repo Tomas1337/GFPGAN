@@ -1,0 +1,16 @@
+cloudinary
+fastapi
+facexlib
+celery[redis]
+lmdb
+python-multipart
+numpy
+opencv-python
+python-multipart
+pyyaml
+redis
+tb-nightly
+torch>=1.7
+torchvision
+tqdm
+yapf

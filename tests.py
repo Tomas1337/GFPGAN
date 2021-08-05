@@ -1,13 +1,16 @@
+from os import error
 from fastapi.testclient import TestClient
 from pathlib import Path
-import requests, time
-
+import time
 from requests.models import HTTPError
-
+from PIL import Image
 from main import app
 import cv2 as cv
 import numpy as np
 from main import is_url_image
+import numpy as np
+import torch
+from celery.result import AsyncResult
 
 client = TestClient(app)
 url = "http://127.0.0.1:8000"
@@ -25,7 +28,6 @@ def test_create_upload_file():
 
     assert response.status_code == 200
     print(response.content)
-#test_create_upload_file()
 
 def sleep(timeout, retry=3):
     def the_real_decorator(function):
@@ -45,7 +47,7 @@ def sleep(timeout, retry=3):
     return the_real_decorator
     
 
-@sleep(3, retry =3)
+@sleep(3, retry =5)
 def does_image_exists(url):
     try:
         ret_val = is_url_image(url)
@@ -58,26 +60,22 @@ def does_image_exists(url):
         raise HTTPError
     else:
         print("Image found in website")
+
+@sleep(10, retry =10)
+def is_celery_task_finished(task_id):
+    try:
+        res = AsyncResult(task_id)
+        if res.ready() is False:
+            print('Task not ready. Trying again')
+            raise ValueError
+        
+    except ValueError as e:
+        print('HTTP error:{e}')
+        raise ValueError
+    else:
+        print("Task finished website")
         
     
-def test_inference_with_cloudinary(url):
-
-    #Part 1 of test
-    response = client.post('/inference_from_cloudinary', headers={'img_link': url})
-    assert response.status_code == 200
-    print("subtest #1 starting.")
-
-    #Part 2 of test 
-    #Build URL for checking
-    print("subtest #2 Starting.") 
-    img_id = response.json().get('img_id')
-    check_img_url = img_id+'_enhanced.jpg'
-    url_check = url[:url.rfind('/')]
-    url_check = url_check + '/' + check_img_url
-    print("subtest #2.1 Starting.")
-    ret_val = does_image_exists(url_check)
-    assert  ret_val == True
-    print("Test test_inference_with_cloudinary: Done")
 
 #this test is meant to fail to False
 def test_does_image_exist():
@@ -87,11 +85,93 @@ def test_does_image_exist():
     assert exists == False
     print("Test test_does_image_exist: Done")
 
+def test_restoration_endpoint(image_path = None):
+    from inference_gfpgan_full import restoration_endpoint
+    from main import gfpgan, face_helper
+
+    if image_path is None:
+        image_path = '/app/GFPGAN/inputs/cropped_faces/Adele_crop.png'
+
+    image = Image.open(image_path)
+    m = restoration_endpoint(gfpgan, face_helper, image)
+    assert np.ndarray == type(m)
+
+def test_celery_sum():
+    from tasks import add
+    print('starting celery sum task test')
+    a = add.delay(3,3).get()
+    assert a == 6
+    print(f'finshed test with result {a}')
+
+def test_process_image():
+    from main import process_image
+    img_link = "https://res.cloudinary.com/dydx43zon/image/upload/v1627639400/test_image_cloudinary.jpg"
+    new_img_link = process_image(img_link, img_id='test_image_path')
+    return new_img_link
+
+
+def test_celery_process_image(img_link=None):
+    if img_link is None:
+        img_link = "https://res.cloudinary.com/dydx43zon/image/upload/v1627639400/test_image_cloudinary.jpg"
+    from tasks import call_process_image
+    print('Initiating request')
+    result = call_process_image.delay(img_link, 'test_image_path')
+    return result
+
+
+def test_inference_with_cloudinary(url=None):
+
+    if url is None:
+        url = "https://res.cloudinary.com/dydx43zon/image/upload/v1627639400/test_image_cloudinary.jpg"
+    #Part 1 of test
+    #Post a request to the endpoint
+    print('posting request to API endpoint')
+    response = client.post('/inference_from_cloudinary', params={'img_link': url})
+    assert response.status_code == 200
+    print("subtest #1 starting.")
+
+    #Part 2 of test 
+    #Build URL for checking if image exists in URL as expected
+    print("subtest #2 Starting.") 
+    img_id = response.json().get('img_id')
+    assert len(img_id) >= 9
+
+    task_id = response.json().get('task_id')
+    ret_val = is_celery_task_finished(task_id)
+
+    assert  ret_val== True
+
+    check_img_url = img_id+'_enhanced.jpg'
+    url_check = url[:url.rfind('/')]
+    url_check = url_check + '/' + check_img_url
+
+    print(f"subtest #2.1 Starting. Checking url:{url_check}")
+    ret_val = does_image_exists(url_check)
+    assert  ret_val == True
+    print("Test test_inference_with_cloudinary: Done")
+
+
+#TODO
+def multiple_inference_call(num=5):
+    # simulating multiple users by simulating multiple calls to the inference endpoint
+    pass
+
+
+if __name__ == '__main__':
+    if torch.cuda.is_available() is False:
+        raise ValueError('No CUDA FOUND. Application will not work.')
+
+    print("Starting tests...")
+    print("Test #1")
+    test_does_image_exist()
+
+    print("Test #2")
+    test_url = "https://res.cloudinary.com/dydx43zon/image/upload/v1627639400/test_image_cloudinary.jpg"
+    test_inference_with_cloudinary()
+
+    print("Test #3")
+    test_celery_sum()
     
-print("Strarting tests...")
-test_does_image_exist()
-
-test_url = "https://res.cloudinary.com/dydx43zon/image/upload/v1627664136/ffuckingkenobitest.jpg"
-test_inference_with_cloudinary(test_url)
-
-print("Tests have  Passed")
+    print("Test #4")
+    test_celery_process_image()
+    print("Tests have  Passed")
