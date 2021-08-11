@@ -14,6 +14,7 @@ from celery.result import AsyncResult
 
 client = TestClient(app)
 url = "http://127.0.0.1:8000"
+TEST_URL = "https://res.cloudinary.com/dydx43zon/image/upload/v1628517482/test_image_cloudinary_wmgoa9.jpg"
 
 
 test_image_path = Path("./inputs/whole_imgs/00.jpg")
@@ -120,9 +121,8 @@ def test_celery_process_image(img_link=None):
 
 
 def test_inference_with_cloudinary(url=None):
-
     if url is None:
-        url = "https://res.cloudinary.com/dydx43zon/image/upload/v1627639400/test_image_cloudinary.jpg"
+        url = "https://res.cloudinary.com/dydx43zon/image/upload/v1628517482/test_image_cloudinary_wmgoa9.jpg"
     #Part 1 of test
     #Post a request to the endpoint
     print('posting request to API endpoint')
@@ -152,9 +152,40 @@ def test_inference_with_cloudinary(url=None):
 
 
 #TODO
-def multiple_inference_call(num=5):
+def test_multiple_inference_call(num=5, url=None):
     # simulating multiple users by simulating multiple calls to the inference endpoint
-    pass
+    if url is None:
+        url = TEST_URL
+
+    task_id_list = []
+    img_id_list = []
+    success_list = [0 for i in range(num)]
+    for i in range(num):
+        response = client.post('/inference_from_cloudinary', params={'img_link': url})
+        task_id = response.json().get('task_id')
+        img_id = response.json().get('img_id')
+
+        task_id_list.append(task_id)
+        img_id_list.append(img_id)
+
+    while all(success_list) is False:
+        for idx, (succ, task) in enumerate(zip(success_list, task_id_list)):
+            if succ == 0:
+                response = client.get('/inference_from_cloudinary', params={'task_id': task})
+                success_flag = response.json().get('success')
+                if (success_flag == 'true') or (success_flag == True):
+                    success_list[idx] = 1
+                else:
+                    pass
+            else:
+                pass 
+        #print(f'Success list: {success_list}')
+    assert True
+    print('Multiple inference call finished and Passed')
+            
+            
+        
+
 
 
 if __name__ == '__main__':
@@ -166,12 +197,15 @@ if __name__ == '__main__':
     test_does_image_exist()
 
     print("Test #2")
-    test_url = "https://res.cloudinary.com/dydx43zon/image/upload/v1627639400/test_image_cloudinary.jpg"
-    test_inference_with_cloudinary()
-
-    print("Test #3")
     test_celery_sum()
     
-    print("Test #4")
+    print("Test #3")
     test_celery_process_image()
+
+    print("Test #4")
+    test_inference_with_cloudinary()
+
+    print("Test #5")
+    test_multiple_inference_call()
     print("Tests have  Passed")
+

@@ -62,10 +62,13 @@ async def inference_from_cloudinary(task_id: str):
     res = cellapp.AsyncResult(task_id)
     if res.ready() and (res.state == 'SUCCESS'):
         img_link = res.get()
-        print(f'res.get yields {img_link}')
-        response = {'success': True, 'img_link': img_link}
+        if is_url_image(img_link.get('url')):
+            success = True
+        else:
+            success = False
+        response = {'success': success, 'img_link': img_link}
     else:
-        #task_info = celery_app.control.inspect().scheduled()
+        #task_info = celery   _app.control.inspect().scheduled()
         queue_position = 1 
         response = {'success': False, 'queue_position': queue_position}
 
@@ -75,10 +78,15 @@ def is_url_image(url):
     # mimetype,encoding = mimetypes.guess_type(url)
     # return (mimetype and mimetype.startswith('image'))
     image_formats = ("image/png", "image/jpeg", "image/jpg")
-    r = requests.head(url)
-    if r.headers["content-type"] in image_formats:
-        return True
-    return False
+    
+    try:
+        r = requests.head(url)
+        if r.headers["content-type"] in image_formats:
+            return True
+        else:
+            return False
+    except:
+        return False
 
 def process_image(img_link, img_id: str = None):
     #Check if image
@@ -94,6 +102,7 @@ def process_image(img_link, img_id: str = None):
         response = "Doesn't seem to be an image"
         print(response)
         return response
+
     print('Sending to restoration endpoint')
     restored_image = restoration_endpoint(gfpgan, face_helper, image)
     print('Restored image received. Starting upload process')
